@@ -1,0 +1,66 @@
+{
+  "name": "@orange001/openclaw-channel-minion",
+  "version": "0.1.0",
+  "description": "OpenClaw channel plugin for ESP32-based Minion robot devices (xiaozhi-esp32 protocol compatible)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "channels": [
+      "minion"
+    ],
+    "installDependencies": true,
+    "compat": {
+      "pluginApi": ">=2026.3.24",
+      "minGatewayVersion": "2026.3.24"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24",
+      "pluginSdkVersion": "2026.3.24"
+    },
+    "channel": {
+      "id": "minion",
+      "label": "Minion",
+      "selectionLabel": "Minion Robot (ESP32 / xiaozhi-esp32)",
+      "blurb": "ESP32-based AI robot device speaking xiaozhi-esp32 WebSocket protocol. Bearer + HMAC authentication, per-device secrets, IP allowlist.",
+      "order": 80,
+      "aliases": [
+        "xiaozhi",
+        "esp32-robot"
+      ]
+    },
+    "install": {
+      "minHostVersion": ">=2026.3.24",
+      "localPath": ".",
+      "defaultChoice": "local"
+    }
+  },
+  "dependencies": {
+    "msedge-tts": "^2.0.5",
+    "opus-decoder": "^0.7.11",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  }
+}

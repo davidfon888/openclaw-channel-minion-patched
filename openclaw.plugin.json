@@ -1,0 +1,360 @@
+{
+  "id": "openclaw-channel-minion",
+  "name": "Minion Channel",
+  "channels": [
+    "minion"
+  ],
+  "description": "Connects ESP32-based Minion robots to OpenClaw via WebSocket. Supports xiaozhi-esp32 firmware protocol with Bearer + HMAC authentication, IP allowlist, and per-device secret rotation.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "port": {
+        "type": "integer",
+        "default": 8788,
+        "description": "WebSocket server port"
+      },
+      "path": {
+        "type": "string",
+        "default": "/minion",
+        "description": "WebSocket route path"
+      },
+      "requireHmac": {
+        "type": "boolean",
+        "default": true,
+        "description": "Require HMAC signature on every inbound message"
+      },
+      "timestampToleranceSec": {
+        "type": "integer",
+        "default": 60,
+        "description": "Max clock skew window for replay protection (seconds)"
+      },
+      "rateLimit": {
+        "type": "object",
+        "properties": {
+          "perDevicePerMinute": {
+            "type": "integer",
+            "default": 60
+          }
+        },
+        "additionalProperties": false
+      },
+      "asr": {
+        "type": "object",
+        "description": "ASR provider config. Selects backend by 'provider'.",
+        "required": [
+          "provider"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "local-whisper",
+              "aliyun-paraformer",
+              "openai-whisper-api",
+              "xfyun"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "integer"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "apiKeyFile": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "taskTimeoutMs": {
+            "type": "integer"
+          },
+          "heartbeat": {
+            "type": "boolean"
+          },
+          "appId": {
+            "type": "string"
+          },
+          "apiSecret": {
+            "type": "string"
+          },
+          "audioFormat": {
+            "enum": [
+              "opus",
+              "pcm"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "tts": {
+        "type": "object",
+        "description": "TTS provider config. Selects backend by 'provider'.",
+        "required": [
+          "provider"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "edge",
+              "aliyun-cosyvoice",
+              "openai-tts"
+            ]
+          },
+          "voice": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "string"
+          },
+          "pitch": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "apiKeyFile": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "devices": {
+        "type": "object",
+        "description": "Map of device_id to device config. Each device has its own secret + sessionKey.",
+        "additionalProperties": {
+          "type": "object",
+          "required": [
+            "secret",
+            "sessionKey"
+          ],
+          "properties": {
+            "secret": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "source",
+                    "id"
+                  ],
+                  "properties": {
+                    "source": {
+                      "enum": [
+                        "env",
+                        "file"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            },
+            "sessionKey": {
+              "type": "string"
+            },
+            "allowedIps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "CIDR ranges or single IPs allowed to connect"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "channelEnvVars": [],
+  "activation": {
+    "onStartup": true
+  },
+  "channelConfigs": {
+    "minion": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "port": {
+            "type": "integer",
+            "default": 8788,
+            "description": "WebSocket server port"
+          },
+          "path": {
+            "type": "string",
+            "default": "/minion",
+            "description": "WebSocket route path"
+          },
+          "requireHmac": {
+            "type": "boolean",
+            "default": true,
+            "description": "Require HMAC signature on every inbound message"
+          },
+          "timestampToleranceSec": {
+            "type": "integer",
+            "default": 60,
+            "description": "Max clock skew window for replay protection (seconds)"
+          },
+          "rateLimit": {
+            "type": "object",
+            "properties": {
+              "perDevicePerMinute": {
+                "type": "integer",
+                "default": 60
+              }
+            },
+            "additionalProperties": false
+          },
+          "asr": {
+            "type": "object",
+            "description": "ASR provider config. Selects backend by 'provider'.",
+            "required": [
+              "provider"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "local-whisper",
+                  "aliyun-paraformer",
+                  "openai-whisper-api",
+                  "xfyun"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "timeoutMs": {
+                "type": "integer"
+              },
+              "apiKey": {
+                "type": "string"
+              },
+              "apiKeyFile": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "taskTimeoutMs": {
+                "type": "integer"
+              },
+              "heartbeat": {
+                "type": "boolean"
+              },
+              "appId": {
+                "type": "string"
+              },
+              "apiSecret": {
+                "type": "string"
+              },
+              "audioFormat": {
+                "enum": [
+                  "opus",
+                  "pcm"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "tts": {
+            "type": "object",
+            "description": "TTS provider config. Selects backend by 'provider'.",
+            "required": [
+              "provider"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "edge",
+                  "aliyun-cosyvoice",
+                  "openai-tts"
+                ]
+              },
+              "voice": {
+                "type": "string"
+              },
+              "rate": {
+                "type": "string"
+              },
+              "pitch": {
+                "type": "string"
+              },
+              "apiKey": {
+                "type": "string"
+              },
+              "apiKeyFile": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "devices": {
+            "type": "object",
+            "description": "Map of device_id to device config. Each device has its own secret + sessionKey.",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "secret",
+                "sessionKey"
+              ],
+              "properties": {
+                "secret": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "source",
+                        "id"
+                      ],
+                      "properties": {
+                        "source": {
+                          "enum": [
+                            "env",
+                            "file"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "sessionKey": {
+                  "type": "string"
+                },
+                "allowedIps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "CIDR ranges or single IPs allowed to connect"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "label": "Minion Channel",
+      "description": "ESP32-based Minion voice robots over WebSocket"
+    }
+  }
+}
