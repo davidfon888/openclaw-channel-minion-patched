@@ -18,7 +18,8 @@ bread-compact, etc.) can:
 - receive TTS audio frames back as the agent speaks
 - emit emoji/expression hints alongside the text channel
 
-Identical surface to the upstream plugin — only the 3 patches below differ.
+Identical surface to the upstream plugin — only the 3 patches below differ, plus an optional
+Volcengine TTS provider added in [Extras](#extras-volcengine-seedtts-20-tts-provider).
 
 ## The 3 patches (vs upstream)
 
@@ -79,6 +80,35 @@ spam, and on misconfigurations the spurious restart can interfere with active se
 This patch adds a minimal `gateway.startAccount` that just `await`s the abort signal — a long-lived
 no-op promise. It exists solely to keep the per-account `running` flag set to `true` in the channel
 manager's runtime snapshot.
+
+## Extras: Volcengine SeedTTS 2.0 TTS provider
+
+Beyond the 3 patches, this fork adds `provider: "volcengine"` to the TTS config. It targets Volcengine's
+豆包语音合成 `v3/tts/unidirectional` HTTP streaming endpoint (NDJSON of base64 ogg_opus), supports
+the `*_bigtts` 大模型 voice families with optional `emotion` (`happy` / `sad` / `excited` / ...), and
+yields raw Opus packets that xiaozhi-esp32 firmware can play without re-encoding.
+
+```json
+{
+  "tts": {
+    "provider": "volcengine",
+    "appId": "<your-volcengine-app-id>",
+    "apiKeyFile": "/path/to/volcengine-access-token-file",
+    "resourceId": "seed-tts-2.0",
+    "voice": "zh_female_vv_uranus_bigtts",
+    "emotion": "happy"
+  }
+}
+```
+
+Different voice families need different `resourceId`s — Volcengine's docs are quiet about this, so:
+
+| Voice suffix | `resourceId` | Example speakers |
+|---|---|---|
+| `*_moon_bigtts` (1.x 大模型) | `volc.service_type.10029` | `zh_female_wanwanxiaohe_moon_bigtts` 湾湾小何 |
+| `*_uranus_bigtts`, `saturn_*_tob` (SeedTTS 2.0) | `seed-tts-2.0` | `zh_female_vv_uranus_bigtts` vivi 2.0 |
+
+Wrong pairing returns `code: 55000000 resource ID is mismatched with speaker related resource`.
 
 ## Installation
 

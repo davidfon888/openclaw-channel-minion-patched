@@ -104,7 +104,8 @@
             "enum": [
               "edge",
               "aliyun-cosyvoice",
-              "openai-tts"
+              "openai-tts",
+              "volcengine"
             ]
           },
           "voice": {
@@ -121,6 +122,33 @@
           },
           "apiKeyFile": {
             "type": "string"
+          },
+          "appId": {
+            "type": "string",
+            "description": "Volcengine app id (火山引擎应用ID)"
+          },
+          "cluster": {
+            "type": "string",
+            "description": "Volcengine TTS cluster (volcano_tts | volcano_icl)"
+          },
+          "speedRatio": {
+            "type": "number",
+            "description": "Speed ratio 0.8-2.0, default 1.0"
+          },
+          "timeoutMs": {
+            "type": "integer"
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "Volcengine TTS 2.0 resource id (default: volc.service_type.10029 for 大模型语音合成 2.0)"
+          },
+          "emotion": {
+            "type": "string",
+            "description": "Voice emotion: happy / sad / angry / surprised / fear / hate / excited / coldness / neutral (requires *_bigtts voice)"
+          },
+          "enableEmotion": {
+            "type": "boolean",
+            "description": "Enable emotion synthesis (auto-true when emotion is set)"
           }
         },
         "additionalProperties": false
@@ -281,7 +309,8 @@
                 "enum": [
                   "edge",
                   "aliyun-cosyvoice",
-                  "openai-tts"
+                  "openai-tts",
+                  "volcengine"
                 ]
               },
               "voice": {
@@ -298,6 +327,33 @@
               },
               "apiKeyFile": {
                 "type": "string"
+              },
+              "appId": {
+                "type": "string",
+                "description": "Volcengine app id (火山引擎应用ID)"
+              },
+              "cluster": {
+                "type": "string",
+                "description": "Volcengine TTS cluster (volcano_tts | volcano_icl)"
+              },
+              "speedRatio": {
+                "type": "number",
+                "description": "Speed ratio 0.8-2.0, default 1.0"
+              },
+              "timeoutMs": {
+                "type": "integer"
+              },
+              "resourceId": {
+                "type": "string",
+                "description": "Volcengine TTS 2.0 resource id (default: volc.service_type.10029 for 大模型语音合成 2.0)"
+              },
+              "emotion": {
+                "type": "string",
+                "description": "Voice emotion: happy / sad / angry / surprised / fear / hate / excited / coldness / neutral (requires *_bigtts voice)"
+              },
+              "enableEmotion": {
+                "type": "boolean",
+                "description": "Enable emotion synthesis (auto-true when emotion is set)"
               }
             },
             "additionalProperties": false
