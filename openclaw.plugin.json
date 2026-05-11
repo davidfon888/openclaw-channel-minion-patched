@@ -135,6 +135,10 @@
             "type": "number",
             "description": "Speed ratio 0.8-2.0, default 1.0"
           },
+          "loudnessRatio": {
+            "type": "number",
+            "description": "Loudness ratio for v3 API, typically 1.0-2.0 (default 1.0). Boost quiet voices like vv 2.0 without re-encoding."
+          },
           "timeoutMs": {
             "type": "integer"
           },

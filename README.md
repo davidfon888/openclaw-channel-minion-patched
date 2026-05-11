@@ -96,10 +96,17 @@ yields raw Opus packets that xiaozhi-esp32 firmware can play without re-encoding
     "apiKeyFile": "/path/to/volcengine-access-token-file",
     "resourceId": "seed-tts-2.0",
     "voice": "zh_female_vv_uranus_bigtts",
-    "emotion": "happy"
+    "emotion": "happy",
+    "loudnessRatio": 1.6
   }
 }
 ```
+
+`loudnessRatio` (optional, default 1.0) is forwarded to Volcengine's `audio_params.loudness_rate`.
+Useful because some voices — notably the SeedTTS 2.0 `*_uranus_bigtts` family (vivi, etc.) — are
+designed for soft / intimate speech and render noticeably quieter than the older `*_moon_bigtts`
+"broadcaster" voices. Bump to ~1.5-2.0 to match perceived loudness; the boost happens server-side
+so audio quality is preserved.
 
 Different voice families need different `resourceId`s — Volcengine's docs are quiet about this, so:
 

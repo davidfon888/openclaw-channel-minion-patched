@@ -18,6 +18,7 @@ export interface VolcengineTtsOptions {
   resourceId?: string;
   voice?: string;
   speedRatio?: number;
+  loudnessRatio?: number;
   emotion?: string;
   enableEmotion?: boolean;
   timeoutMs?: number;
@@ -38,6 +39,7 @@ export class VolcengineTtsProvider implements TtsProvider {
   private readonly resourceId: string;
   private readonly defaultVoice: string;
   private readonly speedRatio?: number;
+  private readonly loudnessRatio?: number;
   private readonly emotion?: string;
   private readonly enableEmotion: boolean;
   private readonly timeoutMs: number;
@@ -52,6 +54,7 @@ export class VolcengineTtsProvider implements TtsProvider {
     this.resourceId = opts.resourceId ?? DEFAULT_RESOURCE_ID;
     this.defaultVoice = opts.voice ?? DEFAULT_VOICE;
     this.speedRatio = opts.speedRatio;
+    this.loudnessRatio = opts.loudnessRatio;
     this.emotion = opts.emotion;
     this.enableEmotion = opts.enableEmotion ?? opts.emotion !== undefined;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -69,6 +72,7 @@ export class VolcengineTtsProvider implements TtsProvider {
       sample_rate: SAMPLE_RATE,
     };
     if (this.speedRatio !== undefined) audioParams.speech_rate = this.speedRatio;
+    if (this.loudnessRatio !== undefined) audioParams.loudness_rate = this.loudnessRatio;
 
     const reqParams: Record<string, unknown> = {
       text: req.text,
