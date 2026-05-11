@@ -136,8 +136,8 @@
             "description": "Speed ratio 0.8-2.0, default 1.0"
           },
           "loudnessRatio": {
-            "type": "number",
-            "description": "Loudness ratio for v3 API, typically 1.0-2.0 (default 1.0). Boost quiet voices like vv 2.0 without re-encoding."
+            "type": "integer",
+            "description": "v3 `loudness_rate` integer offset (NOT a ratio despite the name). 0=default, ~20=sweet spot (+2 dB peak), ~50=server-side soft-limit kicks in (+3 dB max). Use to make vv 2.0 / *_uranus_bigtts voices match wanwan moon loudness."
           },
           "timeoutMs": {
             "type": "integer"
