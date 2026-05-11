@@ -1,6 +1,6 @@
 # openclaw-channel-minion-patched
 
-ESP32 voice device channel for [OpenClaw](https://docs.openclaw.ai), with three patches on top of the
+ESP32 voice device channel for [OpenClaw](https://docs.openclaw.ai), with four patches on top of the
 vanilla `openclaw-channel-minion` plugin to fix bugs discovered while running EchoEar / ESP-VoCat
 hardware in production.
 
@@ -18,10 +18,10 @@ bread-compact, etc.) can:
 - receive TTS audio frames back as the agent speaks
 - emit emoji/expression hints alongside the text channel
 
-Identical surface to the upstream plugin — only the 3 patches below differ, plus an optional
+Identical surface to the upstream plugin — only the 4 patches below differ, plus an optional
 Volcengine TTS provider added in [Extras](#extras-volcengine-seedtts-20-tts-provider).
 
-## The 3 patches (vs upstream)
+## The 4 patches (vs upstream)
 
 ### 1. `openclaw.plugin.json`: `activation` + `channelConfigs`
 
@@ -81,9 +81,41 @@ This patch adds a minimal `gateway.startAccount` that just `await`s the abort si
 no-op promise. It exists solely to keep the per-account `running` flag set to `true` in the channel
 manager's runtime snapshot.
 
+### 4. `src/index.ts` + `src/asr/aliyun-paraformer.ts`: abort handling + paraformer lock leak
+
+Two related fixes for a "device stops responding" failure mode we hit in production
+(2026-05-11). Symptom: after the user pressed the abort button several times to interrupt a long
+TTS reply, subsequent sessions opened cleanly, audio frames flowed in normally, but `paraformer
+task-started` never fired — recoverable only by restarting the gateway. Root cause turned out
+to be two independent bugs that compounded:
+
+**(a) `abort` message was a no-op.** The xiaozhi-esp32 protocol defines `{type:"abort"}` for
+the device's cancel button, but the upstream plugin's `onMessage` just logged it and dropped
+the per-turn state (in-flight ASR stream, pending debounced text, listening flag) unchanged.
+The fix in `src/index.ts` adds a real abort branch that tears down the ASR stream (releasing
+its paraformer lock), clears `dispatchTimer` / `pendingTurnText` / `buffer`, and re-arms a
+fresh `listen-start` so the device and gateway agree on state.
+
+**(b) Paraformer's per-task lock leaked across three race paths.** The provider serializes
+tasks through an internal `wsLock` chain; a missed release deadlocks every subsequent task.
+The fix in `src/asr/aliyun-paraformer.ts` plugs three leaks:
+
+1. **Settled-before-acquire race**: when `abort()` fires while the IIFE is still awaiting
+   `acquireWs()`, `settle()` runs with `release === null` and the lock can't be released.
+   Fix: after `await acquireWs()`, check `settled` and release immediately if so.
+2. **`task-started` timeout never settled**: the 30s timer rejected `startedPromise` but did
+   not call `settle()`, so the WebSocket and lock stayed held until process exit. Fix: timer
+   handler now calls `settle("reject", ...)` so the next task can proceed.
+3. **Defensive 60s timeout on `acquireWs`**: if the previous task's lock release was
+   orphaned by an unhandled error path elsewhere, the chain auto-recovers within 60s
+   instead of hanging indefinitely.
+
+Combined effect: an abort no longer leaves zombie state, and a single orphaned lock no longer
+takes the whole channel down.
+
 ## Extras: Volcengine SeedTTS 2.0 TTS provider
 
-Beyond the 3 patches, this fork adds `provider: "volcengine"` to the TTS config. It targets Volcengine's
+Beyond the 4 patches, this fork adds `provider: "volcengine"` to the TTS config. It targets Volcengine's
 豆包语音合成 `v3/tts/unidirectional` HTTP streaming endpoint (NDJSON of base64 ogg_opus), supports
 the `*_bigtts` 大模型 voice families with optional `emotion` (`happy` / `sad` / `excited` / ...), and
 yields raw Opus packets that xiaozhi-esp32 firmware can play without re-encoding.

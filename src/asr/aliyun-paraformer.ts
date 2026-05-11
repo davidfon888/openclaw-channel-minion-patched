@@ -152,13 +152,44 @@ export class AliyunParaformerProvider implements AsrProvider {
   // socket. The returned `release` MUST be called exactly once (typically
   // in a finally block) regardless of success or failure, or subsequent
   // tasks will deadlock.
+  //
+  // [Defensive 60s timeout] If `prev` never resolves — e.g. a previous
+  // task's release() was orphaned by an unhandled error path elsewhere —
+  // every subsequent acquireWs() would hang forever and the device would
+  // go silent until gateway restart. With the timeout, we release our
+  // own new lock and reject after 60s, which (a) lets a single legit
+  // long-running task complete normally and (b) auto-recovers the chain
+  // within 60s after any orphaned lock. The next acquireWs() will then
+  // see our resolved lock as prev and proceed.
+  private static readonly LOCK_ACQUIRE_TIMEOUT_MS = 60_000;
   private async acquireWs(): Promise<{ ws: WebSocket; release: () => void }> {
     const prev = this.wsLock;
     let release!: () => void;
     this.wsLock = new Promise<void>((res) => { release = res; });
+    let timer: NodeJS.Timeout | null = null;
     try {
-      await prev;
-    } catch { /* ignore */ }
+      await new Promise<void>((resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `paraformer wsLock acquire timeout (${AliyunParaformerProvider.LOCK_ACQUIRE_TIMEOUT_MS}ms) — ` +
+                  `previous task likely orphaned its release, breaking lock chain`,
+              ),
+            ),
+          AliyunParaformerProvider.LOCK_ACQUIRE_TIMEOUT_MS,
+        );
+        prev.then(
+          () => resolve(),
+          () => resolve(), // ignore prev's rejection, match original semantics
+        );
+      });
+    } catch (err) {
+      if (timer) clearTimeout(timer);
+      release();
+      throw err;
+    }
+    if (timer) clearTimeout(timer);
     let ws: WebSocket;
     try {
       ws = await this.ensureWs();
@@ -291,7 +322,16 @@ export class AliyunParaformerProvider implements AsrProvider {
     });
     startedPromise.catch(() => undefined);
     const startTimer = setTimeout(() => {
-      if (!started) signalStartFailed(new Error("paraformer task-started timeout"));
+      if (started || settled) return;
+      // Server never sent task-started within the deadline. Reject the
+      // startedPromise (so push() drops queued frames) AND settle the
+      // whole task — otherwise the wsLock stays held until garbage
+      // collection or process exit, and the next task on this provider
+      // deadlocks waiting for our release(). The plugin's onError
+      // callback will get fired and a replacement stream will be opened.
+      const err = new Error("paraformer task-started timeout");
+      signalStartFailed(err);
+      settle("reject", err);
     }, this.taskTimeoutMs);
 
     const t0 = Date.now();
@@ -366,6 +406,18 @@ export class AliyunParaformerProvider implements AsrProvider {
     (async () => {
       try {
         const acquired = await this.acquireWs();
+        // The caller may have already called abort() / finish() while
+        // we were waiting on acquireWs (the lock chain can take seconds
+        // if a previous task is mid-stream). In that case `settled` is
+        // already true: settle() ran before `release` had been assigned
+        // to the outer scope, so it could not release the lock. Catch
+        // that race here and release immediately — otherwise the lock
+        // leaks and every subsequent task on this provider deadlocks.
+        if (settled) {
+          try { acquired.release(); } catch { /* ignore */ }
+          try { acquired.ws.close(); } catch { /* ignore */ }
+          return;
+        }
         release = acquired.release;
         const ws = acquired.ws;
         activeWs = ws;

@@ -805,6 +805,52 @@ async function bootstrapServer(
         if (msg.type === "listen") {
           if (msg.state === "start") startListening();
           else if (msg.state === "stop") await stopListening();
+        } else if (msg.type === "abort") {
+          // Device's cancel button. Without this branch the message used to
+          // be a no-op (only logged). That left ASR / dispatch / debounce
+          // state in whatever shape the in-flight turn happened to have,
+          // and after a few aborts in a row the channel could enter a
+          // state where audio kept arriving but no paraformer task ever
+          // started — recoverable only by gateway restart (see memory:
+          // minion_asr_silent_stall.md, 2026-05-11). The fix below clears
+          // every piece of per-turn state and re-arms listening so the
+          // next utterance starts from a known-clean baseline.
+          log.info(
+            `[minion] abort received session=${session.sessionId} ` +
+              `reason="${msg.reason ?? ""}"`,
+          );
+          // 1) Tear down the ASR stream. stream.abort() settles the
+          //    paraformer task and releases its wsLock; if we left it
+          //    alive, the next startListening would race a half-shut-down
+          //    stream against a fresh one on the same shared lock chain.
+          if (stream) {
+            try { stream.abort(); } catch { /* ignore */ }
+            stream = null;
+          }
+          // 2) Drop the partial-recognition buffer so debounced text
+          //    from a half-spoken utterance can't get auto-dispatched
+          //    after the user already gave up on it.
+          if (dispatchTimer) {
+            clearTimeout(dispatchTimer);
+            dispatchTimer = null;
+          }
+          pendingTurnText = "";
+          buffer = [];
+          // 3) Force `listening` off so onAudio's gate matches reality
+          //    until the next listen-start (auto-sent right below).
+          listening = false;
+          // 4) Re-arm: push a fresh listen-start to the device + open a
+          //    new ASR stream on our side. We do this proactively rather
+          //    than wait for the device to send one, because some firmware
+          //    builds skip the listen-start after abort and we'd be stuck
+          //    silently dropping every subsequent audio frame.
+          session.send({
+            type: "listen",
+            session_id: session.sessionId,
+            state: "start",
+            mode: "realtime",
+          });
+          startListening();
         } else {
           log.info(`[minion] msg type=${msg.type} session=${session.sessionId}`);
         }
