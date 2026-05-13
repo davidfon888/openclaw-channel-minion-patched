@@ -127,27 +127,48 @@ yields raw Opus packets that xiaozhi-esp32 firmware can play without re-encoding
     "appId": "<your-volcengine-app-id>",
     "apiKeyFile": "/path/to/volcengine-access-token-file",
     "resourceId": "seed-tts-2.0",
-    "voice": "zh_female_vv_uranus_bigtts",
-    "emotion": "happy",
-    "loudnessRatio": 20
+    "voice": "zh_female_cancan_uranus_bigtts",
+    "loudnessRatio": 10,
+    "speedRatio": 0.9
   }
 }
 ```
 
+**Voice selection caveat (verified 2026-05-13 on two EchoEar / ESP-VoCat boards)**:
+the default-looking SeedTTS 2.0 voice `zh_female_vv_uranus_bigtts` (vivi) **renders noticeably
+fast and slightly distorted** on the small embedded ES8311+speaker chain — vv's baseline prosody
+is paced for energetic short-form playback, not the slower, longer agent replies. Even
+`speedRatio: 0.8` (the schema minimum) can't compensate. `zh_female_cancan_uranus_bigtts`
+(灿灿) is the same SeedTTS 2.0 family (same `resourceId`, same quality tier) but with calmer
+default pacing — start there. If you need a still-slower / less expressive option, drop back to
+the 1.x `*_moon_bigtts` family (also change `resourceId` to `volc.service_type.10029`).
+
+**`emotion` field is a footgun for embedded TTS**: when set (e.g. `"emotion": "happy"`), Volcengine
+applies dynamic prosody on top — faster pace + higher pitch + larger amplitude range. On a small
+amp/speaker this clips audibly. We removed it from the example above; only re-enable if you can
+hear it doesn't distort. Note that setting `enableEmotion: false` alone doesn't help — the provider
+code sends emotion to the API as long as the `emotion` field is present at all, so you must
+**delete `emotion` entirely** to fully disable emotional prosody.
+
 `loudnessRatio` (optional, default 0) is forwarded as Volcengine's `audio_params.loudness_rate`.
 **Despite the name, it is an integer offset, not a ratio** — float values like `1.6` are silently
 dropped by the API (returns empty audio). Useful because some voices — notably the SeedTTS 2.0
-`*_uranus_bigtts` family (vivi, etc.) — are designed for soft / intimate speech and render
+`*_uranus_bigtts` family (vivi, cancan, etc.) — are designed for soft / intimate speech and render
 quieter than the older `*_moon_bigtts` "broadcaster" voices. Measured on `vv_uranus_bigtts`:
 `0` → -7.93 dBFS peak, `20` → -5.89, `50` → -4.82 (server soft-limits past ~30, so ~+3 dB is the
-practical ceiling). `20` is the sweet spot.
+practical ceiling). With `emotion` removed, `10` is usually enough; `20` can clip on small
+embedded amps when combined with sibilants/plosives.
+
+`speedRatio` (optional, default 1.0, range 0.8-2.0) maps to `audio_params.speech_rate` — float
+ratio, not integer offset. `0.9` slows by 10%, which helps with the natively-fast vv/cancan
+voices. `0.8` is the floor.
 
 Different voice families need different `resourceId`s — Volcengine's docs are quiet about this, so:
 
 | Voice suffix | `resourceId` | Example speakers |
 |---|---|---|
 | `*_moon_bigtts` (1.x 大模型) | `volc.service_type.10029` | `zh_female_wanwanxiaohe_moon_bigtts` 湾湾小何 |
-| `*_uranus_bigtts`, `saturn_*_tob` (SeedTTS 2.0) | `seed-tts-2.0` | `zh_female_vv_uranus_bigtts` vivi 2.0 |
+| `*_uranus_bigtts`, `saturn_*_tob` (SeedTTS 2.0) | `seed-tts-2.0` | `zh_female_cancan_uranus_bigtts` 灿灿 (recommended), `zh_female_vv_uranus_bigtts` vivi (faster, may distort on small amps) |
 
 Wrong pairing returns `code: 55000000 resource ID is mismatched with speaker related resource`.
 
