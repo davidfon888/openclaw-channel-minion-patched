@@ -52,6 +52,13 @@ try { mkdirSync(MEETINGS_DIR, { recursive: true }); } catch {}
 // 小知/小字/晓志/笑知/小制 etc., and "进入开会模式" sometimes comes in as
 // "进入开会","开始开会模式" etc. — these patterns try to catch the common
 // variants without being so loose they false-trigger on normal chatter.
+// Voice volume control. Matches:
+//   "音量调到 50" / "声音调到 80" / "把音量调成 30" / "音量改为 70"
+const VOLUME_SET_RE = /(?:音量|声音)\D{0,8}?(\d{1,3})/;
+//   "音量大一点" / "声音小一点" / "音量大些" / "声音轻一点"
+const VOLUME_UP_RE   = /(?:音量|声音)\D{0,4}?(?:大一?点|大些|大声|高一?点|高些)/;
+const VOLUME_DOWN_RE = /(?:音量|声音)\D{0,4}?(?:小一?点|小些|小声|低一?点|低些|轻一?点|轻些)/;
+
 const ENTER_MEETING_RE = /(进入|开始|开启|打开).{0,4}(开会|会议)(模式)?/;
 const EXIT_MEETING_RE  = /((退出|结束|关闭).{0,4}(开会|会议)(模式)?|(开会|会议).{0,2}(结束|到此|散会)|散会)/;
 const ZHI_RE = /[小晓笑筱][智志知字制治指植置至支知]/;
@@ -475,17 +482,11 @@ async function bootstrapServer(
       `[minion] session ${session.sessionId} device=${session.device.deviceId} ` +
         `client=${session.clientId}`,
     );
-    // Push the device into always-listening realtime mode immediately after
-    // the hello handshake. With this the firmware skips the wake-word phase
-    // and streams audio frames whenever its on-device VAD detects speech —
-    // no "你好小智" needed.
-    session.send({
-      type: "listen",
-      session_id: session.sessionId,
-      state: "start",
-      mode: "realtime",
-    });
-    log.info(`[minion] auto-pushed listen state=start mode=realtime`);
+    // (Old firmware needed server to push `listen.start` here to skip the
+    // wake-word phase. New ESP-VoCat firmware doesn't recognize a
+    // server-initiated `listen` message — it logs "Unknown message type:
+    // listen" and moments later the WS gets reset. The new firmware
+    // self-initiates listening on connect, so we just don't push.)
 
     let stream: AsrStreamSession | null = null;
     let buffer: Uint8Array[] = [];
@@ -617,10 +618,49 @@ async function bootstrapServer(
     const NOISE_PUNCT = /[\s。,！？，、；：""''""''.!?,;:…—\-]/g;
     const isLikelyNoise = (text: string): boolean =>
       text.replace(NOISE_PUNCT, "").length < 2;
+    // Server-initiated MCP call to the device. Wraps a JSON-RPC request
+    // (with id, so device sends a response) in the `mcp` envelope.
+    let mcpReqId = 1;
+    const callDeviceTool = (name: string, args: Record<string, unknown>) => {
+      const payload = {
+        jsonrpc: "2.0" as const,
+        id: mcpReqId++,
+        method: "tools/call",
+        params: { name, arguments: args },
+      };
+      session.send({
+        type: "mcp",
+        session_id: session.sessionId,
+        payload,
+      });
+      log.info(`[minion] mcp call → device tool="${name}" args=${JSON.stringify(args)}`);
+    };
+
     const handleUserTurn = (text: string) => {
       // Always echo the STT to the device so the OLED shows what was heard.
       session.send({ type: "stt", session_id: session.sessionId, text });
       log.info(`[minion] stt session=${session.sessionId} text="${text}" mode=${mode}`);
+
+      // ---- Volume intent (handled in BOTH modes) ---------------------
+      // Catch "音量调到50" / "声音大一点" type commands without going through
+      // the LLM, which doesn't have access to device MCP tools yet.
+      const volMatch = text.match(VOLUME_SET_RE);
+      if (volMatch) {
+        const target = Math.max(0, Math.min(100, parseInt(volMatch[1]!, 10)));
+        callDeviceTool("self.audio_speaker.set_volume", { volume: target });
+        void speakFixed(`好,音量调到${target}`);
+        return;
+      }
+      if (VOLUME_UP_RE.test(text)) {
+        callDeviceTool("self.audio_speaker.set_volume", { volume: 100 });
+        void speakFixed("好,音量调大");
+        return;
+      }
+      if (VOLUME_DOWN_RE.test(text)) {
+        callDeviceTool("self.audio_speaker.set_volume", { volume: 40 });
+        void speakFixed("好,音量调小");
+        return;
+      }
 
       // ---- Mode transitions (recognized in BOTH modes) ----------------
       if (mode === "normal" && ENTER_MEETING_RE.test(text)) {
@@ -851,6 +891,39 @@ async function bootstrapServer(
             mode: "realtime",
           });
           startListening();
+        } else if (msg.type === "mcp") {
+          // Inbound MCP from device (firmware-initiated notification).
+          // Currently the only one we care about is `meeting.toggle`,
+          // sent by esp-vocat board on touch-screen double-tap.
+          const method = (msg.payload as { method?: string } | undefined)?.method;
+          if (method === "meeting.toggle") {
+            if (mode === "normal") {
+              startMeeting();
+              if (meetingFile) appendToMeeting(meetingFile, `[${formatTime(new Date())}] -- 双击进入开会模式 --\n`);
+              session.send({
+                type: "llm",
+                session_id: session.sessionId,
+                emotion: "neutral",
+                text: "🎙 开会中·静听",
+              });
+              log.info(`[minion] meeting ON (double-tap) session=${session.sessionId}`);
+            } else {
+              const path = meetingFile;
+              if (meetingFile) appendToMeeting(meetingFile, `[${formatTime(new Date())}] -- 双击退出开会模式 --\n`);
+              stopMeeting();
+              session.send({
+                type: "llm",
+                session_id: session.sessionId,
+                emotion: "happy",
+                text: "✓ 退出开会",
+              });
+              log.info(`[minion] meeting saved at ${path} (double-tap)`);
+            }
+          } else {
+            log.info(
+              `[minion] mcp inbound method="${method ?? "?"}" session=${session.sessionId}`,
+            );
+          }
         } else {
           log.info(`[minion] msg type=${msg.type} session=${session.sessionId}`);
         }
